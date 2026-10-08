@@ -4,6 +4,7 @@ from opendbc.car import Bus, make_tester_present_msg
 from opendbc.car.lateral import apply_driver_steer_torque_limits, common_fault_avoidance
 from opendbc.car.interfaces import CarControllerBase
 from opendbc.car.subaru import subarucan
+from opendbc.car.subaru.longitudinal import LONG_TABLE_CARS, get_long_command
 from opendbc.car.subaru.values import DBC, GLOBAL_ES_ADDR, CanBus, CarControllerParams, SubaruFlags
 
 from opendbc.sunnypilot.car.subaru.stop_and_go import SnGCarController
@@ -22,6 +23,7 @@ class CarController(CarControllerBase, SnGCarController):
 
     self.cruise_button_prev = 0
     self.steer_rate_counter = 0
+    self.braking = False
 
     self.p = CarControllerParams(CP)
     self.packer = CANPacker(DBC[CP.carFingerprint][Bus.pt])
@@ -62,7 +64,9 @@ class CarController(CarControllerBase, SnGCarController):
 
     # *** longitudinal ***
 
-    if CC.longActive:
+    if CC.longActive and self.CP.carFingerprint in LONG_TABLE_CARS:
+      cruise_throttle, cruise_rpm, cruise_brake, self.braking = get_long_command(actuators.accel, CS.hill_accel, CS.out.vEgo, self.braking)
+    elif CC.longActive:
       apply_throttle = int(round(np.interp(actuators.accel, CarControllerParams.THROTTLE_LOOKUP_BP, CarControllerParams.THROTTLE_LOOKUP_V)))
       apply_rpm = int(round(np.interp(actuators.accel, CarControllerParams.RPM_LOOKUP_BP, CarControllerParams.RPM_LOOKUP_V)))
       apply_brake = int(round(np.interp(actuators.accel, CarControllerParams.BRAKE_LOOKUP_BP, CarControllerParams.BRAKE_LOOKUP_V)))
@@ -75,6 +79,7 @@ class CarController(CarControllerBase, SnGCarController):
       cruise_throttle = CarControllerParams.THROTTLE_INACTIVE
       cruise_rpm = CarControllerParams.RPM_MIN
       cruise_brake = CarControllerParams.BRAKE_MIN
+      self.braking = False
 
     # *** alerts and pcm cancel ***
     if self.CP.flags & SubaruFlags.PREGLOBAL:

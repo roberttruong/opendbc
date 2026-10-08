@@ -3,6 +3,7 @@ from opendbc.car.disable_ecu import disable_ecu
 from opendbc.car.interfaces import CarInterfaceBase
 from opendbc.car.subaru.carcontroller import CarController
 from opendbc.car.subaru.carstate import CarState
+from opendbc.car.subaru.longitudinal import LONG_TABLE_CARS
 from opendbc.car.subaru.values import CAR, GLOBAL_ES_ADDR, SubaruFlags, SubaruSafetyFlags
 
 
@@ -96,6 +97,12 @@ class CarInterface(CarInterfaceBase):
 
     if ret.openpilotLongitudinalControl:
       ret.safetyConfigs[0].safetyParam |= SubaruSafetyFlags.LONG.value
+
+    if candidate in LONG_TABLE_CARS:
+      # throttle response lags the command by ~0.3 s; the integrator absorbs per-car offsets from the feedforward tables
+      ret.longitudinalActuatorDelay = 0.3
+      ret.longitudinalTuning.kiBP = [0., 35.]
+      ret.longitudinalTuning.kiV = [0.15, 0.1]
 
     return ret
 

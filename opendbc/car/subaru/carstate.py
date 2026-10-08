@@ -4,7 +4,9 @@ from opendbc.car import Bus, structs
 from opendbc.car.common.conversions import Conversions as CV
 from opendbc.car.interfaces import CarStateBase
 from opendbc.car.subaru.values import DBC, CanBus, SubaruFlags
-from opendbc.car import CanSignalRateCalculator
+from opendbc.car import CanSignalRateCalculator, DT_CTRL
+from opendbc.car.common.filter_simple import FirstOrderFilter
+from opendbc.car.subaru.longitudinal import LONG_TABLE_CARS
 
 from opendbc.sunnypilot.car.subaru.mads import MadsCarState
 from opendbc.sunnypilot.car.subaru.stop_and_go import SnGCarState
@@ -19,6 +21,10 @@ class CarState(CarStateBase, MadsCarState, SnGCarState):
     self.shifter_values = can_define.dv["Transmission"]["Gear"]
 
     self.angle_rate_calulator = CanSignalRateCalculator(50)
+
+    # road grade as an acceleration (uphill > 0): the accelerometer also feels gravity on a slope
+    self.hill_accel = 0.
+    self.hill_filter = FirstOrderFilter(0., 1.0, DT_CTRL)
 
   def update(self, can_parsers) -> tuple[structs.CarState, structs.CarStateSP]:
     cp = can_parsers[Bus.pt]
@@ -53,6 +59,9 @@ class CarState(CarStateBase, MadsCarState, SnGCarState):
       cp_wheels.vl["Wheel_Speeds"]["RR"],
     )
     ret.standstill = ret.vEgoRaw == 0
+
+    if self.CP.carFingerprint in LONG_TABLE_CARS:
+      self.hill_accel = self.hill_filter.update(cp.vl["G_Sensor"]["Longitudinal"] - ret.aEgo)
 
     # continuous blinker signals for assisted lane change
     ret.leftBlinker, ret.rightBlinker = self.update_blinker_from_lamp(50, cp.vl["Dashlights"]["LEFT_BLINKER"],
